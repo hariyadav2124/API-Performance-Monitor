@@ -102,8 +102,8 @@ python -m flask --app app init-db           rem recreate missing tables (safe to
 - **Add monitor:** set name, public URL, and optional description. Probe cadence defaults to 60 seconds and can be changed per endpoint (10–86,400 seconds). The optional expected status is an exact 2xx code; otherwise any 2xx passes.
 - **Test:** run and persist an immediate real check without changing the scheduled cadence. **Details** shows the latest HTTP status, results, monitor settings and estimated downtime, with edit, delete and per-endpoint CSV controls.
 - **Filter:** search name, URL or description, or choose Online, Failed, Pending or Slow. The slow flag compares mean successful latency against the configured threshold (500 ms by default).
-- **Table controls:** sort columns, paginate, toggle row density, and select endpoints. **Run All Health Checks** checks the selection, or all monitors if none are selected. **Mute (1h)** suppresses automatic failure toasts in this browser without pausing the scheduler or hiding logs. The UI v3 assets are cache-busted (`?v=20261121-7`) and the dashboard/static responses send no-store cache headers.
-- **Analyze:** select the last hour, 24 hours or seven days. Searching an API filters the **Response time** graph to matching APIs; the **API comparison** graph always compares every API. Hover a response line to highlight its API and see its name, latency and sample time. Graph animations replay on pointer entry and after search, with a five-second duration.
+- **Table controls:** sort columns, paginate, toggle row density, and select endpoints by clicking a row or its checkbox. With two or more selected APIs, **Compare selected** filters both graphs to those APIs; adding or removing a selection refreshes the comparison. **Clear selection** removes all checked APIs. **Run All Health Checks** checks the selection, or all monitors if none are selected. **Mute (1h)** suppresses automatic failure toasts in this browser without pausing the scheduler or hiding logs. The UI assets are cache-busted (`?v=20261121-12`) and the dashboard/static responses send no-store cache headers.
+- **Analyze:** select the last hour, 24 hours or seven days. Searching filters the **Response time** graph; selecting a single API by clicking its row or searching for a unique match opens that API's stats and focuses both charts. Hover a response line to highlight its API and see its name, latency and sample time. Graph animations replay on pointer entry and after search, with a five-second duration.
 - **Graph controls:** use **+**, **−** and **Reset**, scroll or pinch to zoom, and click-drag to pan the graph after zooming. CSV includes the full raw history in the chosen window; the trend limits display to the latest 1,500 points per endpoint.
 - **Failure reasons:** failed API rows show the latest cause when available, including timeout, DNS, TLS, connection and HTTP status errors.
 - **Alerts:** the dashboard shows failed badges and recent error logs, and posts a toast if it observes a transition to failure. These are in-dashboard alerts, not email or webhooks. Brief failures between dashboard refreshes can still appear in logs even if no toast fires.
@@ -128,9 +128,9 @@ The frontend is a single hand-written light console: an off-canvas telemetry sid
 - **Row actions** are `Details` (opens the inspector with the endpoint's sparkline and long-form figures) and `Test` (runs a real HTTP probe on that endpoint only).
 - **Confirmations** use in-app dialogs instead of native browser prompts; edits that change a URL or expected status ask before clearing old results.
 - **Navigation:** the hamburger opens the same sidebar drawer at every screen size. It animates into an X while open; click it again, the sidebar close button, the backdrop, or press Escape to close the drawer.
-- **Responsive layout:** KPI cards and charts adapt to narrow screens, the table scrolls horizontally when needed, and the sidebar remains an off-canvas drawer on phones and desktops.
-- **Chart interactions:** line hover highlights the selected API and shows a compact tooltip with API name, latency and sample time. Search filters the response-time graph only; API comparison continues to show every API. Zoom with the on-chart controls, scroll or pinch; click-drag to pan. The line and bar animations take five seconds and replay when the pointer enters a graph or search changes the response-time series.
-- **Cache safety:** `templates/index.html` requests `app.css`/`app.js` with `?v=20261121-7`, and the dashboard plus static responses carry `Cache-Control: no-store`, so browsers do not keep rendering old assets. Flask template auto-reload is enabled.
+- **Responsive layout:** KPI cards, filters, selected-API stats, chart controls and navigation adapt across phone, tablet, laptop and desktop widths. The endpoint and error tables scroll horizontally when needed; charts stack on narrower screens, and the sidebar opens as a drawer at every size.
+- **Chart interactions:** line hover highlights the selected API and shows a compact tooltip with API name, latency and sample time. Search filters the response-time graph; selecting one API focuses both charts and shows its stats. With two or more APIs selected, **Compare selected** filters both charts to those APIs, while the API comparison shows all APIs by default. The selected-API panel shows only names for multiple selections. **Clear selection** resets the checked APIs. Zoom with the on-chart controls, scroll or pinch; click-drag to pan. The line and bar animations take five seconds and replay when the pointer enters a graph or the response-time series changes.
+- **Cache safety:** `templates/index.html` requests `app.css`/`app.js` with `?v=20261121-12`, and the dashboard plus static responses carry `Cache-Control: no-store`, so browsers do not keep rendering old assets. Flask template auto-reload is enabled.
 
 ## Architecture and viva guide
 
@@ -212,6 +212,8 @@ python tests/browser_ui_check.py
 ![Desktop dashboard showing real probe results](docs/dashboard.png)
 
 [Mobile dashboard screenshot](docs/dashboard-mobile.png)
+
+![Endpoint table reference showing selectable API rows](docs/endpoint-table-reference.png)
 
 ## Security and deployment
 

@@ -334,4 +334,51 @@ body.menu-open{overflow:hidden}
   .rail#sidebar{gap:0;padding:0 10px 14px}
   .rail#sidebar .brand{font-size:15px}
   .rail#sidebar nav a,.rail#sidebar nav button{padding:9px 10px;font-size:13px}
+  .rail#sidebar .rail-head .brand{gap:6px}
+  .rail#sidebar .rail-head .mark{width:27px;height:27px;flex:0 0 27px}
+  .rail#sidebar .rail-head .brand small{padding:3px 5px;font-size:8px}
+  .rail#sidebar .sidebar-close{width:30px;height:30px;flex-basis:30px}
+}
+.rail#sidebar .rail-head .brand{min-width:0;overflow:hidden}
+.rail#sidebar .rail-head .mark,.rail#sidebar .rail-head .brand small,.rail#sidebar .sidebar-close{flex-shrink:0}
+.rail#sidebar .rail-head .brand-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.api-stats:not([hidden]){display:block;margin:12px 0;overflow:hidden;animation:stats-enter .32s cubic-bezier(.2,.75,.25,1) both}
+.api-stats-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 16px 12px}
+.api-stats-head h2{margin:3px 0;font-size:16px;font-weight:750;letter-spacing:-.25px;color:var(--ink)}
+.api-stats-head p{margin:0;max-width:min(72vw,900px);overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11px;white-space:nowrap}
+.api-stat-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;padding:0 15px 14px}
+.api-stat{min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:7px;background:#fafafa;animation:stats-cell-enter .3s ease both}
+.api-stat:nth-child(2){animation-delay:.025s}.api-stat:nth-child(3){animation-delay:.05s}.api-stat:nth-child(4){animation-delay:.075s}.api-stat:nth-child(5){animation-delay:.1s}.api-stat:nth-child(6){animation-delay:.125s}
+.api-stat span{display:block;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.45px;text-transform:uppercase}
+.api-stat strong{display:block;margin-top:4px;overflow:hidden;color:var(--ink);font-size:19px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}
+.api-stat strong.status-down{color:#b4233a}.api-stat strong.status-up{color:#0f7a4d}.api-stat-reason{margin:0 15px 14px;padding:9px 11px;border:1px solid #f0d5d8;border-radius:6px;background:#fff8f8;color:#8f1d30;font-size:11px}
+.selected-api-names{display:flex;flex-wrap:wrap;gap:7px;padding:0 15px 14px}
+.selected-api-name{display:inline-flex;align-items:center;max-width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:#fafafa;color:var(--ink);font-size:12px;font-weight:700;overflow-wrap:anywhere}
+.table-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}
+.compare-selected[aria-pressed="true"]{background:#18181b;border-color:#18181b;color:#fff}
+tbody tr.api-selected,tbody tr.api-selected:hover{background:#f4f4f5;box-shadow:inset 3px 0 #18181b}
+tbody tr.api-selected td:last-child{background:#f4f4f5}
+tbody tr[data-row]{cursor:pointer}
+tbody tr[data-row]:focus-visible td{outline:2px solid #71717a;outline-offset:-2px}
+@keyframes stats-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes stats-cell-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:980px){.api-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:520px){.api-stats-head{padding:12px 11px 10px}.selected-api-names{gap:6px;padding:0 10px 11px}.selected-api-name{font-size:11px}.api-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:0 10px 11px}.api-stat{padding:9px}.api-stat strong{font-size:17px}.api-stat-reason{margin:0 10px 11px}}
+@media(max-width:520px){
+  .table-actions{width:100%;gap:5px}
+  .table-actions .button{min-height:30px;padding:5px 7px;font-size:11px}
+  .chart-card .panel-head{flex-wrap:wrap;align-items:flex-start}
+  .chart-tools{width:100%;justify-content:space-between}
+  .chart-tools .tile{display:none}
+  .api-stats-head h2{font-size:15px}
+}
+@media(max-width:360px){
+  main{padding-right:7px;padding-left:7px}
+  .top{padding-right:7px;padding-left:7px}
+  .title-row .version-pill{display:none}
+  .metric{padding:9px}
+  .metric-top{font-size:9px}
+  .api-stat-grid{gap:5px;padding-right:8px;padding-left:8px}
+  .api-stat{padding:8px}
+  .table-actions .button{padding:4px 6px;font-size:10px}
 }

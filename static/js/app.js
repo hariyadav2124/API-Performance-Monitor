@@ -4,7 +4,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 const display = (v, suffix='') => v == null ? '—' : `${v}${suffix}`;
 const local = value => value ? new Date(value).toLocaleString() : '—';
 const clock = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
-let data, csrf, editing, afterLogin, timeout, generation = 0, chartSignature, comparisonSignature, authEnabled;
+let data, csrf, editing, afterLogin, timeout, generation = 0, chartSignature, comparisonSignature, authEnabled, focusedApiId=null, compareMode=false;
 const states = new Map();
 async function api(url, method='GET', body={}) {
   const options = method === 'GET' ? {} : {method, headers:{'Content-Type':'application/json','X-CSRF-Token':csrf || ''},body:JSON.stringify(body)};
@@ -38,9 +38,22 @@ let visible = [], page = 1, sortKey = '', sortDir = 1, inspecting, muteUntil = N
 function selection() {
   $('selection').hidden = !selected.size;
   $('selection').textContent = `${selected.size} selected`;
+  const compareButton=$('compare-selected');
+  compareButton.hidden=selected.size<2;
+  compareButton.setAttribute('aria-pressed',String(compareMode));
+  compareButton.textContent=compareMode?'Show all APIs':`Compare selected (${selected.size})`;
+  $('clear-selection').hidden=selected.size===0;
   const n=visible.filter(ep=>selected.has(ep.id)).length;
   $('select-all').checked=!!visible.length && n===visible.length;
   $('select-all').indeterminate=n>0 && n<visible.length;
+}
+function selectedApiId(){
+  if(!data) return null;
+  if(focusedApiId&&data.endpoints.some(ep=>ep.id===focusedApiId)) return focusedApiId;
+  const q=$('search').value.trim().toLowerCase();
+  if(!q) return null;
+  const matches=data.endpoints.filter(ep=>`${ep.name} ${ep.url} ${ep.description}`.toLowerCase().includes(q));
+  return matches.length===1?matches[0].id:null;
 }
 function table() {
   if (!data) return;
@@ -58,7 +71,8 @@ function table() {
   $('endpoints').innerHTML=visible.map(ep=>{
     const s=state(ep), health=s==='up'?(ep.slow?'Slow':ep.latest_status?`HTTP ${ep.latest_status}`:'Online'):s==='down'?(ep.latest_status?`Failed · ${ep.latest_status}`:'Failed'):'Pending';
     const failureReason=s==='down'&&ep.latest_error?`<small class="failure-reason" title="${escape(ep.latest_error)}">${escape(ep.latest_error)}</small>`:'';
-    return `<tr data-row="${ep.id}" class="${inspecting===ep.id?'highlight':''}"><td><input type="checkbox" data-select="${ep.id}" aria-label="Select ${escape(ep.name)}" ${selected.has(ep.id)?'checked':''}></td><td><div class="route"><span class="pill method">GET</span><div><strong>${escape(ep.name)}</strong><small title="${escape(ep.url)}">${escape(ep.url)}</small></div></div></td><td><span class="health ${s==='up'?(ep.slow?'violet':'mint'):s==='down'?'red':'pending'}"><i></i>${health}</span>${failureReason}</td><td class="numeric">${display(ep.average,' ms')}</td><td class="numeric">${display(ep.uptime,'%')}</td><td class="numeric">${ep.interval} s</td><td class="numeric" title="${escape(local(ep.latest_at))}">${escape(clock(ep.latest_at))}</td><td class="row-actions"><button class="button" data-id="${ep.id}" data-action="details">Details</button><button class="button" data-id="${ep.id}" data-action="check">Test</button></td></tr>`;
+    const rowClasses=[inspecting===ep.id?'highlight':'',selectedApiId()===ep.id?'api-selected':''].filter(Boolean).join(' ');
+    return `<tr data-row="${ep.id}" tabindex="0" aria-label="Show stats for ${escape(ep.name)}" class="${rowClasses}"><td><input type="checkbox" data-select="${ep.id}" aria-label="Select ${escape(ep.name)}" ${selected.has(ep.id)?'checked':''}></td><td><div class="route"><span class="pill method">GET</span><div><strong>${escape(ep.name)}</strong><small title="${escape(ep.url)}">${escape(ep.url)}</small></div></div></td><td><span class="health ${s==='up'?(ep.slow?'violet':'mint'):s==='down'?'red':'pending'}"><i></i>${health}</span>${failureReason}</td><td class="numeric">${display(ep.average,' ms')}</td><td class="numeric">${display(ep.uptime,'%')}</td><td class="numeric">${ep.interval} s</td><td class="numeric" title="${escape(local(ep.latest_at))}">${escape(clock(ep.latest_at))}</td><td class="row-actions"><button class="button" data-id="${ep.id}" data-action="details">Details</button><button class="button" data-id="${ep.id}" data-action="check">Test</button></td></tr>`;
   }).join('') || `<tr><td colspan="8" class="table-empty">${data.endpoints.length?'No monitors match your filters.':'No monitors yet. Add a public endpoint to get started.'}</td></tr>`;
   selection();
 }
@@ -79,7 +93,8 @@ function plot(id, traces, extra, empty) {
   if (!el._fullLayout) el.innerHTML='';
   if(id==='trend') el._sentinelBaseColors=traces.map((trace,i)=>trace.line?.color || ['#67e8b1','#a99aff','#59bfff','#f6bc75','#f284ae'][i%5]);
   const axis={gridcolor:'#e4e4e7',zeroline:false,automargin:true};
-  Plotly.react(el,traces,{height:235,margin:{l:48,r:20,t:9,b:42},paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#71717a',size:10},hoverlabel:{bgcolor:'#18181b',bordercolor:'#18181b',font:{color:'#fafafa',size:10},namelength:-1},hovermode:'closest',dragmode:'pan',legend:{orientation:'h',y:-.24},uirevision:$('hours').value,transition:{duration:5000,easing:'cubic-in-out'},xaxis:axis,yaxis:{...axis,rangemode:'tozero'},...extra},{responsive:true,scrollZoom:true,doubleClick:'reset',displaylogo:false,displayModeBar:false}).then(()=>{
+  const viewKey=compareMode?`selected:${[...selected].sort((a,b)=>a-b).join(',')}`:id==='trend'?`series:${traces.map(trace=>trace.name).join('|')}`:'all';
+  Plotly.react(el,traces,{height:235,margin:{l:48,r:20,t:9,b:42},paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#71717a',size:10},hoverlabel:{bgcolor:'#18181b',bordercolor:'#18181b',font:{color:'#fafafa',size:10},namelength:-1},hovermode:'closest',dragmode:'pan',legend:{orientation:'h',y:-.24},uirevision:`${$('hours').value}:${viewKey}`,transition:{duration:5000,easing:'cubic-in-out'},xaxis:axis,yaxis:{...axis,rangemode:'tozero'},...extra},{responsive:true,scrollZoom:true,doubleClick:'reset',displaylogo:false,displayModeBar:false}).then(()=>{
     bindLineHover(el);
     if(id==='trend'&&el.dataset.animateOnUpdate==='true'){
       delete el.dataset.animateOnUpdate;
@@ -150,6 +165,7 @@ function render() {
   $('uptime').textContent=display(d.uptime,'%');
   $('rail-uptime').textContent=d.uptime==null?'No recorded checks':`${d.uptime}% check-based uptime`;
   for(const id of selected) if(!d.endpoints.some(e=>e.id===id)) selected.delete(id);
+  if(compareMode&&selected.size<2)compareMode=false;
   if(inspecting) { const ep=d.endpoints.find(e=>e.id===inspecting); if(ep) details(ep); else closeInspector(); }
   $('export').href=`/api/history.csv?hours=${$('hours').value}`;
   $('updated').textContent=`${d.checks} checks · ${d.good} passed · ${d.bad} failed · Updated ${new Date(d.end).toLocaleTimeString()}`;
@@ -158,21 +174,51 @@ function render() {
   $('logs').innerHTML=d.errors.map(e=>`<tr><td>${escape(names.get(e.endpoint_id))}</td><td>${escape(local(e.ts))}</td><td>${display(e.status)}</td><td>${escape(e.error)}</td><td>${escape(e.source)}</td></tr>`).join('') || '<tr><td colspan="5" class="table-empty">No failures recorded in this period.</td></tr>';
   table();
   const searchQuery=$('search').value.trim().toLowerCase();
-  const chartEndpoints=searchQuery?d.endpoints.filter(ep=>`${ep.name} ${ep.url} ${ep.description}`.toLowerCase().includes(searchQuery)):d.endpoints;
+  const searchMatches=searchQuery?d.endpoints.filter(ep=>`${ep.name} ${ep.url} ${ep.description}`.toLowerCase().includes(searchQuery)):[];
+  const checkedEndpoints=d.endpoints.filter(ep=>selected.has(ep.id));
+  const showNamesOnly=checkedEndpoints.length>1;
+  const focusedEndpoint=showNamesOnly?null:d.endpoints.find(ep=>ep.id===selectedApiId());
+  const statsPanel=$('api-stats');
+  statsPanel.hidden=!(showNamesOnly||focusedEndpoint);
+  $('api-stats-label').textContent=showNamesOnly?'SELECTED APIS':'SELECTED API';
+  $('api-stats-names').hidden=!showNamesOnly;
+  $('api-stat-grid').hidden=showNamesOnly||!focusedEndpoint;
+  $('api-stat-reason').hidden=true;
+  if(showNamesOnly){
+    $('api-stats-name').textContent='';
+    $('api-stats-names').innerHTML=checkedEndpoints.map(ep=>`<span class="selected-api-name">${escape(ep.name)}</span>`).join('');
+  }
+  if(focusedEndpoint){
+    const health=state(focusedEndpoint);
+    $('api-stats-name').textContent=focusedEndpoint.name;
+    const healthLabel=health==='down'?'Failed':health==='up'&&focusedEndpoint.slow?'Slow':health==='up'?'Online':'Pending';
+    $('api-stat-health').textContent=healthLabel;
+    $('api-stat-health').className=health==='up'?'status-up':health==='down'?'status-down':'';
+    $('api-stat-http').textContent=display(focusedEndpoint.latest_status);
+    $('api-stat-latency').textContent=display(focusedEndpoint.average,' ms');
+    $('api-stat-uptime').textContent=display(focusedEndpoint.uptime,'%');
+    $('api-stat-good').textContent=display(focusedEndpoint.good);
+    $('api-stat-bad').textContent=display(focusedEndpoint.bad);
+    const reason=$('api-stat-reason');
+    reason.hidden=!focusedEndpoint.latest_error;
+    reason.textContent=focusedEndpoint.latest_error?`Latest failure: ${focusedEndpoint.latest_error}`:'';
+  }
+  const chartEndpoints=compareMode?d.endpoints.filter(ep=>selected.has(ep.id)):focusedEndpoint?[focusedEndpoint]:searchQuery?searchMatches:d.endpoints;
   const chartEndpointIds=new Set(chartEndpoints.map(ep=>ep.id));
   const chartTraces=d.traces.filter(trace=>chartEndpointIds.has(trace.id));
   const comparison=d.endpoints.filter(ep=>ep.average!=null).sort((a,b)=>a.average-b.average);
-  const signature=JSON.stringify([$('hours').value,searchQuery,chartTraces]);
+  const signature=JSON.stringify([$('hours').value,searchQuery,focusedEndpoint?.id,compareMode,[...selected],chartTraces]);
   if (chartSignature!==signature) {
     chartSignature=signature;
     const successful=chartTraces.filter(t=>t.y.some(v=>v!=null));
     plot('trend',successful.map(t=>({type:'scatter',mode:'lines+markers',name:escape(t.name),x:t.x,y:t.y,line:{color:t.color || '#a1a1aa',width:2.5,shape:'spline'},marker:{size:5,line:{color:'#fff',width:1.5}},hovertemplate:'<b>%{fullData.name}</b><br>Response: %{y:.1f} ms<br>Time: %{x|%b %d, %H:%M}<extra></extra>'})),{},'No latency samples yet');
   }
-  const nextComparisonSignature=JSON.stringify([$('hours').value,comparison.map(e=>[e.id,e.name,e.average,e.slow])]);
+  const displayedComparison=compareMode?comparison.filter(ep=>selected.has(ep.id)):comparison;
+  const nextComparisonSignature=JSON.stringify([$('hours').value,compareMode,[...selected],displayedComparison.map(e=>[e.id,e.name,e.average,e.slow])]);
   if(comparisonSignature!==nextComparisonSignature){
     comparisonSignature=nextComparisonSignature;
     const barPalette=['#27272a','#52525b','#71717a','#6366f1','#0f766e','#a16207','#be123c','#4f46e5'];
-    plot('compare',comparison.length?[{type:'bar',orientation:'h',x:comparison.map(e=>e.average),y:comparison.map(e=>String(e.id)),customdata:comparison.map(e=>escape(e.name)),marker:{color:comparison.map((e,i)=>e.slow?'#3f3f46':barPalette[i%barPalette.length]),cornerradius:4},hovertemplate:'%{customdata}: %{x:.1f} ms<extra></extra>'}]:[],{showlegend:false,yaxis:{type:'category',tickmode:'array',tickvals:comparison.map(e=>String(e.id)),ticktext:comparison.map(e=>escape(e.name.slice(0,22))),automargin:true}},'No successful checks yet');
+    plot('compare',displayedComparison.length?[{type:'bar',orientation:'h',x:displayedComparison.map(e=>e.average),y:displayedComparison.map(e=>String(e.id)),customdata:displayedComparison.map(e=>escape(e.name)),marker:{color:displayedComparison.map((e,i)=>e.slow?'#3f3f46':barPalette[i%barPalette.length]),cornerradius:4},hovertemplate:'%{customdata}: %{x:.1f} ms<extra></extra>'}]:[],{showlegend:false,yaxis:{type:'category',tickmode:'array',tickvals:displayedComparison.map(e=>String(e.id)),ticktext:displayedComparison.map(e=>escape(e.name.slice(0,22))),automargin:true}},compareMode?'Select APIs with successful checks to compare':'No successful checks yet');
   }
 }
 async function refresh() {
@@ -239,13 +285,30 @@ function details(ep) {
 $('unlock').onclick=()=>csrf?toast('Operator editing is unlocked for this session.'):authorized(()=>toast('Operator editing unlocked.'));
 $('new-monitor').onclick=$('add').onclick=()=>authorized(()=>editor());
 $('hours').onchange=refresh;
-$('search').oninput=()=>{page=1;if(data){$('trend').dataset.animateOnUpdate='true';render();}};
+$('search').oninput=()=>{page=1;focusedApiId=null;if(data){$('trend').dataset.animateOnUpdate='true';render();}};
 $('filter').onchange=$('page-size').onchange=()=>{page=1;table();};
 $('previous').onclick=()=>{page--;table();};
 $('next').onclick=()=>{page++;table();};
 $('close-inspector').onclick=closeInspector;
-$('select-all').onchange=e=>{visible.forEach(ep=>e.target.checked?selected.add(ep.id):selected.delete(ep.id));table();};
-$('endpoints').onchange=e=>{if(e.target.dataset.select) {const id=Number(e.target.dataset.select); e.target.checked?selected.add(id):selected.delete(id); selection();}};
+$('clear-api-stats').onclick=()=>{$('search').value='';focusedApiId=null;$('trend').dataset.animateOnUpdate='true';if(data)render();};
+$('compare-selected').onclick=()=>{if(selected.size<2)return;compareMode=!compareMode;render();};
+$('clear-selection').onclick=()=>{selected.clear();compareMode=false;focusedApiId=null;if(data)render();else table();};
+$('select-all').onchange=e=>{
+  visible.forEach(ep=>e.target.checked?selected.add(ep.id):selected.delete(ep.id));
+  if(compareMode&&selected.size<2)compareMode=false;
+  if(data)render();else table();
+};
+$('endpoints').onchange=e=>{if(e.target.dataset.select) {
+  const id=Number(e.target.dataset.select);
+  e.target.checked?selected.add(id):selected.delete(id);
+  if(compareMode&&selected.size<2)compareMode=false;
+  if(data)render();else selection();
+}};
+$('endpoints').onkeydown=e=>{
+  if(!['Enter',' '].includes(e.key)||e.target.closest('button,input,a'))return;
+  const row=e.target.closest('tr[data-row]');
+  if(row){e.preventDefault();row.click();}
+};
 document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{sortDir=sortKey===b.dataset.sort?-sortDir:1;sortKey=b.dataset.sort;document.querySelectorAll('[data-sort]').forEach(c=>{c.closest('th').removeAttribute('aria-sort');c.textContent=c.textContent.replace(/ [↕↑↓]$/,' '+(c===b?(sortDir===1?'↑':'↓'):'↕'));});b.closest('th').setAttribute('aria-sort',sortDir===1?'ascending':'descending');page=1;table();});
 $('density').onclick=e=>{const b=e.currentTarget, roomy=$('split').classList.toggle('roomy');b.setAttribute('aria-pressed',String(!roomy));b.querySelector('span').textContent=`Density: ${roomy?'Comfortable':'Compact'}`;};
 const focusSearch=()=>{$('search').focus();$('search').select();};
@@ -335,11 +398,21 @@ function ask({title='Confirm action',text='',label='Continue',danger=true}={}){
   });
 }
 $('endpoints').onclick=e=>{
+  const row=e.target.closest('tr[data-row]');
+  if(row&&!e.target.closest('button,input,a,select')){
+    const id=Number(row.dataset.row);
+    focusedApiId=id;
+    selected.has(id)?selected.delete(id):selected.add(id);
+    if(compareMode&&selected.size<2)compareMode=false;
+    $('trend').dataset.animateOnUpdate='true';
+    render();
+    return;
+  }
   const btn=e.target.closest('button[data-id]');
   if(!btn) return;
   const ep=data.endpoints.find(x=>x.id===Number(btn.dataset.id));
   if(!ep) return;
-  if(btn.dataset.action==='details') {details(ep);table();}
+  if(btn.dataset.action==='details') {focusedApiId=ep.id;selected.add(ep.id);render();details(ep);table();}
   else authorized(()=>action(btn,async()=>{
     const result=await api(`/api/endpoints/${ep.id}/check`,'POST');
     toast(result.ok?`${ep.name}: HTTP ${result.status} in ${result.latency} ms`:`${ep.name}: ${result.error}`,!result.ok);
