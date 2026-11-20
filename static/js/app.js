@@ -4,7 +4,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 const display = (v, suffix='') => v == null ? '—' : `${v}${suffix}`;
 const local = value => value ? new Date(value).toLocaleString() : '—';
 const clock = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
-let data, csrf, editing, afterLogin, timeout, generation = 0, chartSignature, authEnabled;
+let data, csrf, editing, afterLogin, timeout, generation = 0, chartSignature, comparisonSignature, authEnabled;
 const states = new Map();
 async function api(url, method='GET', body={}) {
   const options = method === 'GET' ? {} : {method, headers:{'Content-Type':'application/json','X-CSRF-Token':csrf || ''},body:JSON.stringify(body)};
@@ -57,22 +57,88 @@ function table() {
   $('next').disabled=page===max;
   $('endpoints').innerHTML=visible.map(ep=>{
     const s=state(ep), health=s==='up'?(ep.slow?'Slow':ep.latest_status?`HTTP ${ep.latest_status}`:'Online'):s==='down'?(ep.latest_status?`Failed · ${ep.latest_status}`:'Failed'):'Pending';
-    return `<tr data-row="${ep.id}" class="${inspecting===ep.id?'highlight':''}"><td><input type="checkbox" data-select="${ep.id}" aria-label="Select ${escape(ep.name)}" ${selected.has(ep.id)?'checked':''}></td><td><div class="route"><span class="pill method">GET</span><div><strong>${escape(ep.name)}</strong><small title="${escape(ep.url)}">${escape(ep.url)}</small></div></div></td><td><span class="health ${s==='up'?(ep.slow?'violet':'mint'):s==='down'?'red':'pending'}"><i></i>${health}</span></td><td class="numeric">${display(ep.average,' ms')}</td><td class="numeric">${display(ep.uptime,'%')}</td><td class="numeric">${ep.interval} s</td><td class="numeric" title="${escape(local(ep.latest_at))}">${escape(clock(ep.latest_at))}</td><td class="row-actions"><button class="button" data-id="${ep.id}" data-action="details">Details</button><button class="button" data-id="${ep.id}" data-action="check">Test</button></td></tr>`;
+    const failureReason=s==='down'&&ep.latest_error?`<small class="failure-reason" title="${escape(ep.latest_error)}">${escape(ep.latest_error)}</small>`:'';
+    return `<tr data-row="${ep.id}" class="${inspecting===ep.id?'highlight':''}"><td><input type="checkbox" data-select="${ep.id}" aria-label="Select ${escape(ep.name)}" ${selected.has(ep.id)?'checked':''}></td><td><div class="route"><span class="pill method">GET</span><div><strong>${escape(ep.name)}</strong><small title="${escape(ep.url)}">${escape(ep.url)}</small></div></div></td><td><span class="health ${s==='up'?(ep.slow?'violet':'mint'):s==='down'?'red':'pending'}"><i></i>${health}</span>${failureReason}</td><td class="numeric">${display(ep.average,' ms')}</td><td class="numeric">${display(ep.uptime,'%')}</td><td class="numeric">${ep.interval} s</td><td class="numeric" title="${escape(local(ep.latest_at))}">${escape(clock(ep.latest_at))}</td><td class="row-actions"><button class="button" data-id="${ep.id}" data-action="details">Details</button><button class="button" data-id="${ep.id}" data-action="check">Test</button></td></tr>`;
   }).join('') || `<tr><td colspan="8" class="table-empty">${data.endpoints.length?'No monitors match your filters.':'No monitors yet. Add a public endpoint to get started.'}</td></tr>`;
   selection();
+}
+function replayPlotAnimation(plot){
+  plot.classList.remove('replay-animation');
+  void plot.offsetWidth;
+  plot.classList.add('replay-animation');
 }
 function plot(id, traces, extra, empty) {
   const el=$(id);
   if (!traces.length) {
     if (el._fullLayout) Plotly.purge(el);
+    delete el.dataset.hoverBound;
     el.innerHTML=`<div class="plot-empty"><strong>${empty}</strong><span>Only recorded successful checks appear here.</span></div>`;
     return;
   }
   if (!window.Plotly) throw new Error('Chart library could not be loaded.');
   if (!el._fullLayout) el.innerHTML='';
-  const axis={gridcolor:'#e3ebf7',zeroline:false,automargin:true};
-  Plotly.react(el,traces,{height:235,margin:{l:48,r:20,t:9,b:42},paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#53657f',size:10},hoverlabel:{bgcolor:'#202c3c',font:{color:'#edf3fb'}},legend:{orientation:'h',y:-.24},uirevision:$('hours').value,xaxis:axis,yaxis:{...axis,rangemode:'tozero'},...extra},{responsive:true,displaylogo:false,displayModeBar:false}).catch(()=>toast('Chart rendering failed.',true));
+  if(id==='trend') el._sentinelBaseColors=traces.map((trace,i)=>trace.line?.color || ['#67e8b1','#a99aff','#59bfff','#f6bc75','#f284ae'][i%5]);
+  const axis={gridcolor:'#e4e4e7',zeroline:false,automargin:true};
+  Plotly.react(el,traces,{height:235,margin:{l:48,r:20,t:9,b:42},paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{color:'#71717a',size:10},hoverlabel:{bgcolor:'#18181b',bordercolor:'#18181b',font:{color:'#fafafa',size:10},namelength:-1},hovermode:'closest',dragmode:'pan',legend:{orientation:'h',y:-.24},uirevision:$('hours').value,transition:{duration:5000,easing:'cubic-in-out'},xaxis:axis,yaxis:{...axis,rangemode:'tozero'},...extra},{responsive:true,scrollZoom:true,doubleClick:'reset',displaylogo:false,displayModeBar:false}).then(()=>{
+    bindLineHover(el);
+    if(id==='trend'&&el.dataset.animateOnUpdate==='true'){
+      delete el.dataset.animateOnUpdate;
+      replayPlotAnimation(el);
+    }
+  }).catch(()=>toast('Chart rendering failed.',true));
 }
+function bindLineHover(el){
+  if(el.id!=='trend'||el.dataset.hoverBound) return;
+  const colors=['#2563eb','#0891b2','#059669','#d97706','#db2777','#7c3aed','#dc2626','#0f766e'];
+  el.on('plotly_hover',event=>{
+    const index=event.points?.[0]?.curveNumber;
+    if(index==null) return;
+    const base=el._sentinelBaseColors || el.data.map(()=> '#a1a1aa');
+    Plotly.restyle(el,{'line.color':base.map((color,i)=>i===index?colors[i%colors.length]:'#d4d4d8'),'line.width':base.map((_,i)=>i===index?3.5:1.5),'marker.color':base.map((color,i)=>i===index?colors[i%colors.length]:'#d4d4d8')});
+  });
+  el.on('plotly_unhover',()=>{const base=el._sentinelBaseColors || el.data.map(()=> '#a1a1aa');Plotly.restyle(el,{'line.color':base,'line.width':base.map(()=>2.5),'marker.color':base});});
+  el.dataset.hoverBound='true';
+}
+function zoomChart(id,action){
+  const el=$(id);
+  if(!el?._fullLayout||!window.Plotly) return;
+  if(action==='reset'){
+    const reset={};
+    for(const axis of ['xaxis','yaxis']) if(el._fullLayout[axis]?.type!=='category') reset[`${axis}.autorange`]=true;
+    Plotly.relayout(el,reset);
+    return;
+  }
+  const factor=action==='in' ? .72 : 1.4, updates={};
+  for(const axis of ['xaxis','yaxis']){
+    const layoutAxis=el._fullLayout[axis];
+    if(!layoutAxis||layoutAxis.type==='category'||!Array.isArray(layoutAxis.range)) continue;
+    const range=layoutAxis.range.map(value=>typeof value==='number'?value:Date.parse(value));
+    if(range.some(value=>!Number.isFinite(value))) continue;
+    const center=(range[0]+range[1])/2, half=(range[1]-range[0])*factor/2;
+    updates[`${axis}.range`]=[center-half,center+half];
+    updates[`${axis}.autorange`]=false;
+  }
+  if(Object.keys(updates).length) Plotly.relayout(el,updates);
+}
+document.addEventListener('click',event=>{
+  const button=event.target.closest('.chart-zoom [data-chart]');
+  if(button) zoomChart(button.dataset.chart,button.dataset.zoom);
+});
+document.querySelectorAll('.plot').forEach(plot=>plot.addEventListener('pointerenter',()=>replayPlotAnimation(plot)));
+const sidebar=$('sidebar'), menuToggle=$('menu-toggle'), sidebarClose=$('sidebar-close'), sidebarBackdrop=$('sidebar-backdrop');
+function setSidebar(open){
+  sidebar.classList.toggle('open',open);
+  sidebarBackdrop.classList.toggle('open',open);
+  document.body.classList.toggle('menu-open',open);
+  menuToggle.setAttribute('aria-expanded',String(open));
+  menuToggle.setAttribute('aria-label',open?'Close navigation':'Open navigation');
+  if(open) sidebar.querySelector('nav a')?.focus();
+  else menuToggle.focus();
+}
+menuToggle.onclick=()=>setSidebar(!sidebar.classList.contains('open'));
+sidebarClose.onclick=()=>setSidebar(false);
+sidebarBackdrop.onclick=()=>setSidebar(false);
+sidebar.querySelectorAll('nav a').forEach(link=>link.addEventListener('click',()=>setSidebar(false)));
 function render() {
   const d=data;
   $('nav-count').textContent=d.endpoints.length;
@@ -91,13 +157,22 @@ function render() {
   const names=new Map(d.endpoints.map(e=>[e.id,e.name]));
   $('logs').innerHTML=d.errors.map(e=>`<tr><td>${escape(names.get(e.endpoint_id))}</td><td>${escape(local(e.ts))}</td><td>${display(e.status)}</td><td>${escape(e.error)}</td><td>${escape(e.source)}</td></tr>`).join('') || '<tr><td colspan="5" class="table-empty">No failures recorded in this period.</td></tr>';
   table();
+  const searchQuery=$('search').value.trim().toLowerCase();
+  const chartEndpoints=searchQuery?d.endpoints.filter(ep=>`${ep.name} ${ep.url} ${ep.description}`.toLowerCase().includes(searchQuery)):d.endpoints;
+  const chartEndpointIds=new Set(chartEndpoints.map(ep=>ep.id));
+  const chartTraces=d.traces.filter(trace=>chartEndpointIds.has(trace.id));
   const comparison=d.endpoints.filter(ep=>ep.average!=null).sort((a,b)=>a.average-b.average);
-  const signature=JSON.stringify([$('hours').value,d.traces,comparison.map(e=>[e.name,e.average,e.slow])]);
+  const signature=JSON.stringify([$('hours').value,searchQuery,chartTraces]);
   if (chartSignature!==signature) {
     chartSignature=signature;
-    const successful=d.traces.filter(t=>t.y.some(v=>v!=null));
-    plot('trend',successful.map(t=>({type:'scatter',mode:'lines+markers',name:escape(t.name),x:t.x,y:t.y,line:{color:['#2862dd','#6650b6','#0a8368','#ad5a10','#a73977'][(t.id-1)%5],width:2},marker:{size:5},hovertemplate:'%{y:.1f} ms<extra>%{fullData.name}</extra>'})),{},'No latency samples yet');
-    plot('compare',comparison.length?[{type:'bar',orientation:'h',x:comparison.map(e=>e.average),y:comparison.map(e=>String(e.id)),customdata:comparison.map(e=>escape(e.name)),marker:{color:comparison.map(e=>e.slow?'#ff8595':'#3976ed'),cornerradius:4},hovertemplate:'%{customdata}: %{x:.1f} ms<extra></extra>'}]:[],{showlegend:false,yaxis:{type:'category',tickmode:'array',tickvals:comparison.map(e=>String(e.id)),ticktext:comparison.map(e=>escape(e.name.slice(0,22))),automargin:true}},'No successful checks yet');
+    const successful=chartTraces.filter(t=>t.y.some(v=>v!=null));
+    plot('trend',successful.map(t=>({type:'scatter',mode:'lines+markers',name:escape(t.name),x:t.x,y:t.y,line:{color:t.color || '#a1a1aa',width:2.5,shape:'spline'},marker:{size:5,line:{color:'#fff',width:1.5}},hovertemplate:'<b>%{fullData.name}</b><br>Response: %{y:.1f} ms<br>Time: %{x|%b %d, %H:%M}<extra></extra>'})),{},'No latency samples yet');
+  }
+  const nextComparisonSignature=JSON.stringify([$('hours').value,comparison.map(e=>[e.id,e.name,e.average,e.slow])]);
+  if(comparisonSignature!==nextComparisonSignature){
+    comparisonSignature=nextComparisonSignature;
+    const barPalette=['#27272a','#52525b','#71717a','#6366f1','#0f766e','#a16207','#be123c','#4f46e5'];
+    plot('compare',comparison.length?[{type:'bar',orientation:'h',x:comparison.map(e=>e.average),y:comparison.map(e=>String(e.id)),customdata:comparison.map(e=>escape(e.name)),marker:{color:comparison.map((e,i)=>e.slow?'#3f3f46':barPalette[i%barPalette.length]),cornerradius:4},hovertemplate:'%{customdata}: %{x:.1f} ms<extra></extra>'}]:[],{showlegend:false,yaxis:{type:'category',tickmode:'array',tickvals:comparison.map(e=>String(e.id)),ticktext:comparison.map(e=>escape(e.name.slice(0,22))),automargin:true}},'No successful checks yet');
   }
 }
 async function refresh() {
@@ -164,7 +239,8 @@ function details(ep) {
 $('unlock').onclick=()=>csrf?toast('Operator editing is unlocked for this session.'):authorized(()=>toast('Operator editing unlocked.'));
 $('new-monitor').onclick=$('add').onclick=()=>authorized(()=>editor());
 $('hours').onchange=refresh;
-$('search').oninput=$('filter').onchange=$('page-size').onchange=()=>{page=1;table();};
+$('search').oninput=()=>{page=1;if(data){$('trend').dataset.animateOnUpdate='true';render();}};
+$('filter').onchange=$('page-size').onchange=()=>{page=1;table();};
 $('previous').onclick=()=>{page--;table();};
 $('next').onclick=()=>{page++;table();};
 $('close-inspector').onclick=closeInspector;
@@ -174,7 +250,7 @@ document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{sortDir=sortK
 $('density').onclick=e=>{const b=e.currentTarget, roomy=$('split').classList.toggle('roomy');b.setAttribute('aria-pressed',String(!roomy));b.querySelector('span').textContent=`Density: ${roomy?'Comfortable':'Compact'}`;};
 const focusSearch=()=>{$('search').focus();$('search').select();};
 $('focus-search').onclick=focusSearch;
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){e.preventDefault();focusSearch();}if(e.key==='Escape'&&document.activeElement===$('search')){$('search').value='';$('search').oninput();}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){e.preventDefault();focusSearch();}if(e.key==='Escape'&&sidebar.classList.contains('open'))setSidebar(false);if(e.key==='Escape'&&document.activeElement===$('search')){$('search').value='';$('search').oninput();}});
 function muteLabel(){const muted=Date.now()<muteUntil;$('mute').setAttribute('aria-pressed',String(muted));$('mute').querySelector('span').textContent=muted?'Unmute alerts':'Mute (1h)';}
 $('mute').onclick=()=>{muteUntil=Date.now()<muteUntil?0:Date.now()+3600000;localStorage.setItem('sentinelMute',String(muteUntil));muteLabel();toast(muteUntil?'Automatic alert toasts muted for one hour.':'Automatic alerts unmuted.');};
 muteLabel();

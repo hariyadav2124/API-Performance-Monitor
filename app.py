@@ -38,6 +38,7 @@ DEMO = [
 def create_app():
     app = Flask(__name__)
     app.config.update(SECRET_KEY=os.getenv('MONITOR_SECRET') or secrets.token_hex(32), MAX_CONTENT_LENGTH=8192,
+                      TEMPLATES_AUTO_RELOAD=True,
                       SESSION_COOKIE_SAMESITE='Strict', SESSION_COOKIE_SECURE=os.getenv('MONITOR_SECURE_COOKIE') == '1')
     token = os.getenv('MONITOR_TOKEN')
     try:
