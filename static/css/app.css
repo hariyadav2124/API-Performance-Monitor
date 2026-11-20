@@ -382,3 +382,9 @@ tbody tr[data-row]:focus-visible td{outline:2px solid #71717a;outline-offset:-2p
   .api-stat{padding:8px}
   .table-actions .button{padding:4px 6px;font-size:10px}
 }
+
+@media(max-width:520px){
+  .top{align-items:center;flex-wrap:nowrap}
+  .top .crumb{flex:1 1 auto;min-width:0;max-width:none;white-space:nowrap}
+  .top .actions{width:auto;flex:0 0 auto;justify-content:flex-end}
+}
