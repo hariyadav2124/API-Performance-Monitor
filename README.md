@@ -1,6 +1,6 @@
 # API Sentinel · API Performance Monitor
 
-API Sentinel sends real HTTP GET probes to public APIs and stores the results in SQLite. Its updated light **UI v2** dashboard is table-first and shows endpoint status, historical latency, cross-API comparisons, error logs and check-based uptime. Buttons include hover, press, focus, ripple and loading feedback. There are no generated monitoring results in the running app. The optional seed command registers URLs only.
+API Sentinel sends real HTTP GET probes to public APIs and stores the results in SQLite. Its updated light **UI v3** dashboard is table-first and shows endpoint status, historical latency, cross-API comparisons, error logs and check-based uptime. Buttons include hover, press, focus, ripple and loading feedback. There are no generated monitoring results in the running app. The optional seed command registers URLs only.
 
 ## Quick start
 
@@ -102,8 +102,10 @@ python -m flask --app app init-db           rem recreate missing tables (safe to
 - **Add monitor:** set name, public URL, and optional description. Probe cadence defaults to 60 seconds and can be changed per endpoint (10–86,400 seconds). The optional expected status is an exact 2xx code; otherwise any 2xx passes.
 - **Test:** run and persist an immediate real check without changing the scheduled cadence. **Details** shows the latest HTTP status, results, monitor settings and estimated downtime, with edit, delete and per-endpoint CSV controls.
 - **Filter:** search name, URL or description, or choose Online, Failed, Pending or Slow. The slow flag compares mean successful latency against the configured threshold (500 ms by default).
-- **Table controls:** sort columns, paginate, toggle row density, and select endpoints. **Run All Health Checks** checks the selection, or all monitors if none are selected. **Mute (1h)** suppresses automatic failure toasts in this browser without pausing the scheduler or hiding logs. The UI v2 assets are cache-busted (`?v=20261120-2`) and the dashboard/static responses send no-store cache headers so browsers do not keep showing the old design.
-- **Analyze:** select the last hour, 24 hours or seven days. Hover, zoom or toggle series in the Plotly latency chart. CSV includes the full raw history in the chosen window; the trend limits display to the latest 1,500 points per endpoint.
+- **Table controls:** sort columns, paginate, toggle row density, and select endpoints. **Run All Health Checks** checks the selection, or all monitors if none are selected. **Mute (1h)** suppresses automatic failure toasts in this browser without pausing the scheduler or hiding logs. The UI v3 assets are cache-busted (`?v=20261121-7`) and the dashboard/static responses send no-store cache headers.
+- **Analyze:** select the last hour, 24 hours or seven days. Searching an API filters the **Response time** graph to matching APIs; the **API comparison** graph always compares every API. Hover a response line to highlight its API and see its name, latency and sample time. Graph animations replay on pointer entry and after search, with a five-second duration.
+- **Graph controls:** use **+**, **−** and **Reset**, scroll or pinch to zoom, and click-drag to pan the graph after zooming. CSV includes the full raw history in the chosen window; the trend limits display to the latest 1,500 points per endpoint.
+- **Failure reasons:** failed API rows show the latest cause when available, including timeout, DNS, TLS, connection and HTTP status errors.
 - **Alerts:** the dashboard shows failed badges and recent error logs, and posts a toast if it observes a transition to failure. These are in-dashboard alerts, not email or webhooks. Brief failures between dashboard refreshes can still appear in logs even if no toast fires.
 - **History:** changing a URL or expected status clears that monitor’s old history to avoid mixing different health policies. Deleting a monitor deletes its history. Export first if you need to retain it.
 
@@ -118,15 +120,17 @@ python -m flask --app app init-db           rem recreate missing tables (safe to
 
 **An HTTP pass is not proof of application health.** A service could return `200` while its JSON says `degraded`. API Sentinel checks HTTP reachability and the status policy; it does not parse response bodies or run business transactions. Use a health endpoint that returns a non-2xx when a required dependency fails.
 
-## Dashboard guide (UI v2)
+## Dashboard guide (UI v3)
 
-The frontend is a single hand-written light console: a fixed telemetry sidebar, a sticky workspace bar, four KPI cards, a filter/probe toolbar, a dense sortable endpoint table with a details inspector, Plotly trend and comparison charts, and a recent-errors table. Every value on the page comes from `/api/dashboard` (real SQLite checks) — nothing is hardcoded.
+The frontend is a single hand-written light console: an off-canvas telemetry sidebar, a sticky workspace bar, four KPI cards, a filter/probe toolbar, a dense sortable endpoint table with a details inspector, Plotly trend and comparison charts, and a recent-errors table. Every value on the page comes from `/api/dashboard` (real SQLite checks) — nothing is hardcoded.
 
 - **Buttons** have hover elevation, an inset press state, a pointer-origin ripple, visible keyboard focus rings, and a loading spinner while a probe or save is in flight.
 - **Row actions** are `Details` (opens the inspector with the endpoint's sparkline and long-form figures) and `Test` (runs a real HTTP probe on that endpoint only).
 - **Confirmations** use in-app dialogs instead of native browser prompts; edits that change a URL or expected status ask before clearing old results.
-- **Narrow screens** stack the sidebar into a top navigation bar and let the inspector drop below the table; when the inspector is open on a laptop, the less critical `Every` and `Last check` columns fold into the inspector so nothing is clipped.
-- **Cache safety:** `templates/index.html` requests `app.css`/`app.js` with `?v=20261120-2`, and the dashboard plus static responses carry `Cache-Control: no-store`, so a browser cannot keep rendering the previous design.
+- **Navigation:** the hamburger opens the same sidebar drawer at every screen size. It animates into an X while open; click it again, the sidebar close button, the backdrop, or press Escape to close the drawer.
+- **Responsive layout:** KPI cards and charts adapt to narrow screens, the table scrolls horizontally when needed, and the sidebar remains an off-canvas drawer on phones and desktops.
+- **Chart interactions:** line hover highlights the selected API and shows a compact tooltip with API name, latency and sample time. Search filters the response-time graph only; API comparison continues to show every API. Zoom with the on-chart controls, scroll or pinch; click-drag to pan. The line and bar animations take five seconds and replay when the pointer enters a graph or search changes the response-time series.
+- **Cache safety:** `templates/index.html` requests `app.css`/`app.js` with `?v=20261121-7`, and the dashboard plus static responses carry `Cache-Control: no-store`, so browsers do not keep rendering old assets. Flask template auto-reload is enabled.
 
 ## Architecture and viva guide
 
