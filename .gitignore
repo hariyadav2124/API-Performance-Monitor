@@ -1,0 +1,9 @@
+.venv/
+apif/
+__pycache__/
+*.pyc
+.pytest_cache/
+instance/*
+!instance/.gitkeep
+.env
+
